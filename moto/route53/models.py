@@ -403,11 +403,13 @@ class FakeZone(CloudFormationModel):
             or (rrset.get("Type") is not None and record_set.type != rrset["Type"])
         ]
 
-    def delete_rrset_by_id(self, set_identifier: str) -> None:
+    def delete_rrset_by_id(self, rrset: dict[str, Any]) -> None:
         self.rrsets = [
             record_set
             for record_set in self.rrsets
-            if record_set.set_identifier != set_identifier
+            if record_set.name != rrset["Name"]
+            or record_set.type != rrset["Type"]
+            or record_set.set_identifier != rrset["SetIdentifier"]
         ]
 
     def add_vpc(self, vpc_id: str | None, vpc_region: str | None) -> dict[str, Any]:
@@ -749,7 +751,7 @@ class Route53Backend(BaseBackend):
                     the_zone.upsert_rrset(record_set)
             elif action == "DELETE":
                 if "SetIdentifier" in record_set:
-                    the_zone.delete_rrset_by_id(record_set["SetIdentifier"])
+                    the_zone.delete_rrset_by_id(record_set)
                 else:
                     the_zone.delete_rrset(record_set)
             the_zone.rr_changes.append(original_change)

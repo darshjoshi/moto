@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 import boto3
 import botocore
@@ -394,6 +395,58 @@ def test_deleting_weighted_route():
     assert len(cnames) == 3
     assert cnames[-1]["Name"] == "cname.testdns.aws.com."
     assert cnames[-1]["SetIdentifier"] == "success-test-bar"
+
+
+@mock_aws
+def test_deleting_weighted_route_keeps_other_records_with_same_identifier():
+    conn = boto3.client("route53", region_name="us-east-1")
+    zone_id = conn.create_hosted_zone(
+        Name="testdns.aws.com", CallerReference=str(hash("foo"))
+    )["HostedZone"]["Id"]
+
+    def weighted(name: str, record_type: str, value: str) -> dict[str, Any]:
+        return {
+            "Name": name,
+            "Type": record_type,
+            "SetIdentifier": "primary",
+            "Weight": 50,
+            "TTL": 60,
+            "ResourceRecords": [{"Value": value}],
+        }
+
+    record_sets = [
+        weighted("a.testdns.aws.com", "A", "10.0.0.1"),
+        weighted("a.testdns.aws.com", "TXT", '"a"'),
+        weighted("b.testdns.aws.com", "A", "10.0.0.2"),
+    ]
+    conn.change_resource_record_sets(
+        HostedZoneId=zone_id,
+        ChangeBatch={
+            "Changes": [
+                {"Action": "CREATE", "ResourceRecordSet": record_set}
+                for record_set in record_sets
+            ]
+        },
+    )
+
+    conn.change_resource_record_sets(
+        HostedZoneId=zone_id,
+        ChangeBatch={
+            "Changes": [{"Action": "DELETE", "ResourceRecordSet": record_sets[0]}]
+        },
+    )
+
+    remaining = [
+        (record_set["Name"], record_set["Type"])
+        for record_set in conn.list_resource_record_sets(HostedZoneId=zone_id)[
+            "ResourceRecordSets"
+        ]
+        if record_set.get("SetIdentifier") == "primary"
+    ]
+    assert remaining == [
+        ("a.testdns.aws.com.", "TXT"),
+        ("b.testdns.aws.com.", "A"),
+    ]
 
 
 @mock_aws
