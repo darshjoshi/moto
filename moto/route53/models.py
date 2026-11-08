@@ -699,13 +699,16 @@ class Route53Backend(BaseBackend):
                 value["ResourceRecordSet"]["Name"], code="InvalidChangeBatch"
             )
             if value["Action"] == "CREATE" and value in the_zone.rr_changes:
-                name = value["ResourceRecordSet"]["Name"] + "."
+                name = value["ResourceRecordSet"]["Name"].rstrip(".") + "."
                 _type = value["ResourceRecordSet"]["Type"]
+                set_identifier = value["ResourceRecordSet"].get("SetIdentifier")
                 # check if the record exists or just in rr_changes (journal)
-                all_records = list(
-                    the_zone.get_record_sets(start_type=_type, start_name=name)
-                )
-                if all_records:
+                if any(
+                    rrset.name == name
+                    and rrset.type == _type
+                    and rrset.set_identifier == set_identifier
+                    for rrset in the_zone.rrsets
+                ):
                     raise ResourceRecordAlreadyExists(name=name, _type=_type)
 
         for value in change_list:

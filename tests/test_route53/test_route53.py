@@ -454,6 +454,46 @@ def test_create_delete_create():
 
 
 @mock_aws
+def test_create_delete_create_with_later_record_in_zone():
+    conn = boto3.client("route53", region_name="us-east-1")
+    zone_id = conn.create_hosted_zone(
+        Name="testdns.aws.com", CallerReference=str(hash("foo"))
+    )["HostedZone"]["Id"]
+
+    def change(action: str, name: str) -> None:
+        conn.change_resource_record_sets(
+            HostedZoneId=zone_id,
+            ChangeBatch={
+                "Changes": [
+                    {
+                        "Action": action,
+                        "ResourceRecordSet": {
+                            "Name": name,
+                            "Type": "A",
+                            "TTL": 60,
+                            "ResourceRecords": [{"Value": "192.168.1.1"}],
+                        },
+                    }
+                ]
+            },
+        )
+
+    change("CREATE", "a.testdns.aws.com")
+    change("CREATE", "z.testdns.aws.com")
+    change("DELETE", "a.testdns.aws.com")
+    change("CREATE", "a.testdns.aws.com")
+
+    names = [
+        record_set["Name"]
+        for record_set in conn.list_resource_record_sets(HostedZoneId=zone_id)[
+            "ResourceRecordSets"
+        ]
+        if record_set["Type"] == "A"
+    ]
+    assert names == ["a.testdns.aws.com.", "z.testdns.aws.com."]
+
+
+@mock_aws
 def test_deleting_latency_route():
     conn = boto3.client("route53", region_name="us-east-1")
 
