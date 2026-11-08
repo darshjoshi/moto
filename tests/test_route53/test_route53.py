@@ -838,6 +838,8 @@ def test_list_hosted_zones_by_dns_name():
     zones = conn.list_hosted_zones_by_name(DNSName="my.test.net")
     assert len(zones["HostedZones"]) == 1
     assert zones["DNSName"] == "my.test.net."
+    assert zones["IsTruncated"] is False
+    assert zones["MaxItems"] == "100"
 
     # test sort order
     zones = conn.list_hosted_zones_by_name()

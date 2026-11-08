@@ -218,7 +218,10 @@ def test_list_health_checks():
         },
     )["HealthCheck"]
 
-    assert conn.list_health_checks()["HealthChecks"] == [check]
+    response = conn.list_health_checks()
+    assert response["HealthChecks"] == [check]
+    assert response["IsTruncated"] is False
+    assert response["MaxItems"] == "100"
 
 
 @mock_aws

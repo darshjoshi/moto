@@ -76,8 +76,14 @@ class Route53(BaseResponse):
 
     def list_hosted_zones_by_name(self) -> ActionResult:
         dnsname = self._get_param("DNSName")
+        max_items = self._get_int_param("MaxItems", 100)
         dnsname, zones = self.backend.list_hosted_zones_by_name(dnsname)
-        result = {"DNSName": dnsname, "HostedZones": zones}
+        result = {
+            "DNSName": dnsname,
+            "HostedZones": zones,
+            "IsTruncated": False,
+            "MaxItems": max_items,
+        }
         return ActionResult(result)
 
     def list_hosted_zones_by_vpc(self) -> ActionResult:
@@ -242,8 +248,13 @@ class Route53(BaseResponse):
         return ActionResult(result)
 
     def list_health_checks(self) -> ActionResult:
+        max_items = self._get_int_param("MaxItems", 100)
         health_checks = self.backend.list_health_checks()
-        result = {"HealthChecks": health_checks}
+        result = {
+            "HealthChecks": health_checks,
+            "IsTruncated": False,
+            "MaxItems": max_items,
+        }
         return ActionResult(result)
 
     def get_health_check(self) -> ActionResult:
