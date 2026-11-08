@@ -1647,6 +1647,65 @@ def test_list_resource_record_sets_name_type_filters():
 
 
 @mock_aws
+def test_list_resource_record_sets_paginates_records_with_set_identifiers():
+    conn = boto3.client("route53", region_name="us-east-1")
+    zone_id = conn.create_hosted_zone(
+        Name="testdns.aws.com", CallerReference=str(hash("foo"))
+    )["HostedZone"]["Id"]
+    conn.change_resource_record_sets(
+        HostedZoneId=zone_id,
+        ChangeBatch={
+            "Changes": [
+                {
+                    "Action": "CREATE",
+                    "ResourceRecordSet": {
+                        "Name": "www.testdns.aws.com",
+                        "Type": "A",
+                        "SetIdentifier": identifier,
+                        "Weight": 1,
+                        "TTL": 60,
+                        "ResourceRecords": [{"Value": "10.0.0.1"}],
+                    },
+                }
+                for identifier in ["blue", "green", "red"]
+            ]
+        },
+    )
+
+    page = conn.list_resource_record_sets(
+        HostedZoneId=zone_id,
+        StartRecordName="www.testdns.aws.com",
+        StartRecordType="A",
+        MaxItems="1",
+    )
+    assert page["ResourceRecordSets"][0]["SetIdentifier"] == "blue"
+    assert page["IsTruncated"] is True
+    assert page["NextRecordName"] == "www.testdns.aws.com."
+    assert page["NextRecordType"] == "A"
+    assert page["NextRecordIdentifier"] == "green"
+
+    page = conn.list_resource_record_sets(
+        HostedZoneId=zone_id,
+        StartRecordName="www.testdns.aws.com",
+        StartRecordType="A",
+        StartRecordIdentifier="green",
+        MaxItems="1",
+    )
+    assert page["ResourceRecordSets"][0]["SetIdentifier"] == "green"
+    assert page["NextRecordIdentifier"] == "red"
+
+    paginator = conn.get_paginator("list_resource_record_sets")
+    identifiers = [
+        record_set.get("SetIdentifier")
+        for page in paginator.paginate(
+            HostedZoneId=zone_id, PaginationConfig={"PageSize": 1}
+        )
+        for record_set in page["ResourceRecordSets"]
+    ]
+    assert identifiers == [None, None, "blue", "green", "red"]
+
+
+@mock_aws
 def test_get_change():
     conn = boto3.client("route53", region_name="us-east-2")
 

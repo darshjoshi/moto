@@ -190,6 +190,7 @@ class Route53(BaseResponse):
         zoneid = self._get_param("HostedZoneId")
         start_type = self._get_param("StartRecordType")
         start_name = self._get_param("StartRecordName")
+        start_identifier = self._get_param("StartRecordIdentifier")
         max_items = self._get_int_param("MaxItems", 300)
 
         if start_type and not start_name:
@@ -199,18 +200,21 @@ class Route53(BaseResponse):
             record_sets,
             next_name,
             next_type,
+            next_identifier,
             is_truncated,
         ) = self.backend.list_resource_record_sets(
             zoneid,
             start_type=start_type,  # type: ignore
             start_name=start_name,  # type: ignore
             max_items=max_items,
+            start_identifier=start_identifier,
         )
         result = {
             "ResourceRecordSets": record_sets,
             "IsTruncated": is_truncated,
             "NextRecordName": next_name if is_truncated else None,
             "NextRecordType": next_type if is_truncated else None,
+            "NextRecordIdentifier": next_identifier if is_truncated else None,
             "MaxItems": max_items,
         }
         return ActionResult(result)

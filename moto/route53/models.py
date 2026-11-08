@@ -423,17 +423,31 @@ class FakeZone(CloudFormationModel):
     def delete_vpc(self, vpc_id: str) -> None:
         self.vpcs = [vpc for vpc in self.vpcs if vpc["vpc_id"] != vpc_id]
 
-    def get_record_sets(self, start_type: str, start_name: str) -> list[RecordSet]:
+    def get_record_sets(
+        self, start_type: str, start_name: str, start_identifier: str | None = None
+    ) -> list[RecordSet]:
         def predicate(rrset: RecordSet) -> bool:
             rrset_name_reversed = reverse_domain_name(rrset.name)
             start_name_reversed = reverse_domain_name(start_name)
             return rrset_name_reversed < start_name_reversed or (
-                rrset_name_reversed == start_name_reversed and rrset.type < start_type  # type: ignore
+                rrset_name_reversed == start_name_reversed
+                and (
+                    rrset.type < start_type  # type: ignore
+                    or (
+                        rrset.type == start_type
+                        and start_identifier is not None
+                        and (rrset.set_identifier or "") < start_identifier
+                    )
+                )
             )
 
         record_sets = sorted(
             self.rrsets,
-            key=lambda rrset: (reverse_domain_name(rrset.name), rrset.type),
+            key=lambda rrset: (
+                reverse_domain_name(rrset.name),
+                rrset.type,
+                rrset.set_identifier or "",
+            ),
         )
 
         if start_name:
@@ -673,21 +687,32 @@ class Route53Backend(BaseBackend):
         return resources
 
     def list_resource_record_sets(
-        self, zone_id: str, start_type: str, start_name: str, max_items: int
-    ) -> tuple[list[RecordSet], str | None, str | None, bool]:
-        """
-        The StartRecordIdentifier-parameter is not yet implemented
-        """
+        self,
+        zone_id: str,
+        start_type: str,
+        start_name: str,
+        max_items: int,
+        start_identifier: str | None = None,
+    ) -> tuple[list[RecordSet], str | None, str | None, str | None, bool]:
         if start_name:
             validate_domain_name(start_name)
         the_zone = self.get_hosted_zone(zone_id)
-        all_records = list(the_zone.get_record_sets(start_type, start_name))
+        all_records = list(
+            the_zone.get_record_sets(start_type, start_name, start_identifier)
+        )
         records = all_records[0:max_items]
         next_record = all_records[max_items] if len(all_records) > max_items else None
         next_start_name = next_record.name if next_record else None
         next_start_type = next_record.type if next_record else None
+        next_start_identifier = next_record.set_identifier if next_record else None
         is_truncated = next_record is not None
-        return records, next_start_name, next_start_type, is_truncated
+        return (
+            records,
+            next_start_name,
+            next_start_type,
+            next_start_identifier,
+            is_truncated,
+        )
 
     def change_resource_record_sets(
         self, zoneid: str, change_list: list[dict[str, Any]]
