@@ -4357,6 +4357,38 @@ def test_list_backups():
 
 
 @mock_aws
+def test_list_backups_paginates():
+    client = boto3.client("dynamodb", "us-east-1")
+    table_name = f"T{uuid4()}"
+    client.create_table(
+        TableName=table_name,
+        KeySchema=[{"AttributeName": "id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "id", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+    backup_arns = [
+        client.create_backup(TableName=table_name, BackupName=f"backup-{i}")[
+            "BackupDetails"
+        ]["BackupArn"]
+        for i in range(3)
+    ]
+
+    page = client.list_backups(TableName=table_name, Limit=2)
+    assert [s["BackupArn"] for s in page["BackupSummaries"]] == backup_arns[:2]
+    assert page["LastEvaluatedBackupArn"] == backup_arns[1]
+
+    page = client.list_backups(
+        TableName=table_name, Limit=2, ExclusiveStartBackupArn=backup_arns[1]
+    )
+    assert [s["BackupArn"] for s in page["BackupSummaries"]] == backup_arns[2:]
+    assert "LastEvaluatedBackupArn" not in page
+
+    paginator = client.get_paginator("list_backups")
+    pages = paginator.paginate(TableName=table_name, PaginationConfig={"PageSize": 1})
+    assert [s["BackupArn"] for p in pages for s in p["BackupSummaries"]] == backup_arns
+
+
+@mock_aws
 def test_restore_table_from_non_existent_backup_raises_error():
     client = boto3.client("dynamodb", "us-east-1")
     non_existent_arn = "arn:aws:dynamodb:us-east-1:123456789012:table/table-name/backup/01623095754481-2cfcd6f9"

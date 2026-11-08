@@ -1551,8 +1551,16 @@ class DynamoHandler(BaseResponse):
     def list_backups(self) -> ActionResult:
         body = self.body
         table_name = body.get("TableName")
-        backups = self.dynamodb_backend.list_backups(table_name)
-        response = {"BackupSummaries": [backup.summary for backup in backups]}
+        backups, last_evaluated_backup_arn = self.dynamodb_backend.list_backups(
+            table_name,
+            limit=body.get("Limit"),
+            exclusive_start_backup_arn=body.get("ExclusiveStartBackupArn"),
+        )
+        response: dict[str, Any] = {
+            "BackupSummaries": [backup.summary for backup in backups]
+        }
+        if last_evaluated_backup_arn:
+            response["LastEvaluatedBackupArn"] = last_evaluated_backup_arn
         return DynamoResult(response)
 
     def create_backup(self) -> ActionResult:

@@ -766,7 +766,12 @@ class DynamoDBBackend(BaseBackend, TaggableResourcesMixin):
             raise BackupNotFoundException(backup_arn)
         return self.backups[backup_arn]
 
-    def list_backups(self, table_name: str) -> list[Backup]:
+    def list_backups(
+        self,
+        table_name: str,
+        limit: int | None = None,
+        exclusive_start_backup_arn: str | None = None,
+    ) -> tuple[list[Backup], str | None]:
         backups = list(self.backups.values())
         if table_name is not None:
             backups = [
@@ -775,7 +780,16 @@ class DynamoDBBackend(BaseBackend, TaggableResourcesMixin):
                 if backup.table.name == table_name
                 or backup.table.table_arn == table_name
             ]
-        return backups
+        if exclusive_start_backup_arn:
+            arns = [backup.arn for backup in backups]
+            if exclusive_start_backup_arn in arns:
+                backups = backups[arns.index(exclusive_start_backup_arn) + 1 :]
+            else:
+                backups = []
+        if limit and len(backups) > limit:
+            backups = backups[:limit]
+            return backups, backups[-1].arn
+        return backups, None
 
     def create_backup(self, table_name: str, backup_name: str) -> Backup:
         try:
